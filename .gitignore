@@ -1,0 +1,20 @@
+# Environment / secrets
+.env
+
+# Database
+*.sql
+*.sql.zip
+
+# XAMPP
+xampp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
