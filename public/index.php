@@ -1,32 +1,13 @@
 <?php
-
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/auth.php';
-
-requireLogin();
-
-$userName = $_SESSION['user_name'];
-
-?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Welcome | Project Continuum</title>
-</head>
-
-<body>
-
-    <h1>Project Continuum</h1>
-
-    <h2>Welcome back, <?= htmlspecialchars($userName) ?>.</h2>
-
-    <p>You are successfully logged in.</p>
-
-    <a href="logout.php">Log out</a>
-
-</body>
-</html>
+require_once __DIR__ . '/../database/database.php'; require_once __DIR__ . '/../app/auth.php'; require_once __DIR__ . '/../app/layout.php'; requireLogin();
+$userId=$_SESSION['user_id'];
+$summary=$pdo->prepare("SELECT COUNT(*) AS projects,COALESCE(SUM((SELECT COUNT(*) FROM goals g WHERE g.project_id=p.id)),0) AS goals,COALESCE(SUM((SELECT COUNT(*) FROM goals g WHERE g.project_id=p.id AND g.status='completed')),0) AS completed FROM projects p WHERE p.user_id=?");$summary->execute([$userId]);$stats=$summary->fetch();
+$stmt=$pdo->prepare("SELECT s.*,p.id AS project_id,p.name AS project_name FROM sessions s JOIN projects p ON p.id=s.project_id WHERE p.user_id=? ORDER BY (s.ended_at IS NULL) DESC, s.started_at DESC LIMIT 1");$stmt->execute([$userId]);$resume=$stmt->fetch();
+$stmt=$pdo->prepare("SELECT p.id,p.name,p.status,(SELECT COUNT(*) FROM goals g WHERE g.project_id=p.id) AS goal_count FROM projects p WHERE p.user_id=? ORDER BY p.updated_at DESC LIMIT 3");$stmt->execute([$userId]);$projects=$stmt->fetchAll();
+$stmt=$pdo->prepare("SELECT g.id,g.title,g.project_id,p.name AS project_name FROM goals g JOIN projects p ON p.id=g.project_id WHERE p.user_id=? AND g.status='active' ORDER BY g.created_at ASC LIMIT 3");$stmt->execute([$userId]);$focus=$stmt->fetchAll();
+$stmt=$pdo->prepare("SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE,s.started_at,s.ended_at)),0) AS minutes FROM sessions s JOIN projects p ON p.id=s.project_id WHERE p.user_id=? AND s.ended_at IS NOT NULL AND YEARWEEK(s.started_at,1)=YEARWEEK(CURDATE(),1)");$stmt->execute([$userId]);$minutes=(int)$stmt->fetch()['minutes'];$focusTime=$minutes?floor($minutes/60).'h '.($minutes%60).'m':'—';
+?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard | Project Continuum</title><link rel="stylesheet" href="../assets/css/app.css"></head><body><div class="app-shell"><?php renderSidebar('dashboard');?><main class="main-content"><header class="page-header"><div><h1>Good morning, <?=htmlspecialchars($_SESSION['user_name'])?>! ☀</h1><p>Here is the context you need to continue.</p></div><a class="notification" href="sessions.php" aria-label="View sessions">◷</a></header>
+<?php if($resume):?><section class="card resume-card"><div class="resume-icon">✓</div><div class="resume-copy"><div class="eyebrow"><?=$resume['ended_at']?'Your last session':'You have an active session'?></div><p><strong><?=htmlspecialchars($resume['project_name'])?></strong> — <?=htmlspecialchars($resume['next_step']?:$resume['remaining_work']?:'Open the session and capture your next step.')?></p><span class="metadata">Started <?=date('M j · g:i A',strtotime($resume['started_at']))?><?=$resume['ended_at']?' · Session finished':' · In progress'?></span></div><a class="button" href="session.php?id=<?=(int)$resume['id']?>"><?=$resume['ended_at']?'Review & continue →':'Resume now →'?></a></section><?php else:?><section class="card resume-card"><div class="resume-icon">+</div><div class="resume-copy"><div class="eyebrow">Ready when you are</div><p>Create a project, then start a work session to preserve your return point.</p></div><a class="button" href="projects.php">View projects →</a></section><?php endif;?>
+<section class="metrics"><div class="card metric"><small>Active Projects</small><strong><?= (int)$stats['projects'] ?></strong><span>Projects in progress</span></div><div class="card metric"><small>Total Goals</small><strong><?= (int)$stats['goals'] ?></strong><span>Across all projects</span></div><div class="card metric"><small>Completed Goals</small><strong><?= (int)$stats['completed'] ?></strong><span>Progress captured</span></div><div class="card metric"><small>Focus Time</small><strong><?=$focusTime?></strong><span>This week</span></div></section>
+<section class="content-grid"><div class="card panel"><h2 class="panel-title">Recent Projects</h2><?php if($projects):foreach($projects as $project):?><a class="project-row" href="project.php?id=<?=(int)$project['id']?>"><div><strong><?=htmlspecialchars($project['name'])?></strong><span class="badge <?=statusClass($project['status'])?>"><?=htmlspecialchars(statusLabel($project['status']))?></span></div><small><?= (int)$project['goal_count'] ?> goals<br>Open project →</small></a><?php endforeach;else:?><p class="empty">No projects yet. Create one to begin preserving work context.</p><?php endif;?><a class="link-arrow" href="projects.php">View all projects →</a></div><div class="card panel"><h2 class="panel-title">Today’s Focus</h2><p class="metadata">Unfinished work, ready to pick up.</p><ul class="focus-list"><?php if($focus):foreach($focus as $goal):?><li><span class="check"></span><span><?=htmlspecialchars($goal['title'])?><small style="display:block;color:#80908a;margin-top:3px"><?=htmlspecialchars($goal['project_name'])?></small></span></li><?php endforeach;else:?><li><span class="check"></span>Add a goal to create your next return point.</li><?php endif;?></ul><a class="link-arrow" href="projects.php">View all goals →</a></div></section>
+</main></div></body></html>
